@@ -1,0 +1,22 @@
+name: Build Web2Apk
+on:
+  push:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu‑latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build apk
+        uses: lw112190/web2android‑action@v0.2.7
+        with:
+          source_dir: ./
+          app_name: "随机点名"
+          package_name: "com.example.callroll"
+          version_name: "1.0.0"
+          version_code: 1
+          internet: false
+      - name: upload artifact
+        uses: actions/upload‑artifact@v4
+        with:
+          path: "*.apk"
