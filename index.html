@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>随机点名系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f9;
+        }
+        h1 {
+            color: #333;
+        }
+        input[type="file"] {
+            margin: 20px 0;
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        #name-display {
+            font-size: 36px;
+            color: #e74c3c;
+            margin: 50px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            margin: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <h1>随机点名系统</h1>
+    <input type="file" id="excel-file" accept=".xlsx,.xls">
+    <select id="class-select" disabled></select>
+    <div id="name-display">未开始点名</div>
+    <button id="roll-call-btn" disabled>开始点名</button>
+    <!-- 离线本地库，不再调用网络CDN -->
+    <script src="xlsx.full.min.js"></script>
+    <script>
+        let classes = {};
+        let intervalId;
+        let autoStopTimer = null;
+        let isRolling = false;
+        let remainingStudents = [];
+        const excelFileInput = document.getElementById('excel-file');
+        const classSelect = document.getElementById('class-select');
+        const nameDisplay = document.getElementById('name-display');
+        const rollCallBtn = document.getElementById('roll-call-btn');
+
+        const savedClasses = localStorage.getItem('classes');
+        if (savedClasses) {
+            classes = JSON.parse(savedClasses);
+            populateClassSelect();
+            classSelect.disabled = false;
+            rollCallBtn.disabled = false;
+        }
+
+        function populateClassSelect() {
+            classSelect.innerHTML = '';
+            for (const className in classes) {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                classSelect.appendChild(option);
+            }
+            resetRemainingPool();
+        }
+
+        function resetRemainingPool() {
+            const selectedClass = classSelect.value;
+            if(classes[selectedClass]){
+                remainingStudents = [...classes[selectedClass]];
+            }
+        }
+
+        classSelect.addEventListener('change', resetRemainingPool);
+
+        excelFileInput.addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    classes = {};
+                    workbook.SheetNames.forEach(sheetName => {
+                        const worksheet = workbook.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                        const nameColumn = findNameColumn(jsonData);
+                        if (nameColumn) {
+                            classes[sheetName] = jsonData.map(item => item[nameColumn]);
+                        }
+                    });
+                    localStorage.setItem('classes', JSON.stringify(classes));
+                    populateClassSelect();
+                    classSelect.disabled = false;
+                    rollCallBtn.disabled = false;
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        function findNameColumn(data) {
+            if (data.length === 0) return null;
+            const headers = Object.keys(data[0]);
+            const possibleNameHeaders = ['姓名', 'name'];
+            for (const header of headers) {
+                if (possibleNameHeaders.some(possible => header.includes(possible))) {
+                    return header;
+                }
+            }
+            return null;
+        }
+
+        function stopRollCall(){
+            clearInterval(intervalId);
+            clearTimeout(autoStopTimer);
+            isRolling = false;
+            rollCallBtn.textContent = '开始点名';
+        }
+
+        function toggleRollCall() {
+            if (isRolling) {
+                stopRollCall();
+            } else {
+                const selectedClass = classSelect.value;
+                const allStudents = classes[selectedClass];
+                if(remainingStudents.length === 0){
+                    remainingStudents = [...allStudents];
+                    nameDisplay.textContent = "已全部点完，重置名单";
+                    return;
+                }
+                isRolling = true;
+                rollCallBtn.textContent = '停止点名';
+
+                intervalId = setInterval(() => {
+                    const randomIndex = Math.floor(Math.random() * allStudents.length);
+                    const randomName = allStudents[randomIndex];
+                    nameDisplay.textContent = randomName;
+                }, 100);
+
+                // 0.5秒自动停止
+                autoStopTimer = setTimeout(()=>{
+                    stopRollCall();
+                    const pickIndex = Math.floor(Math.random() * remainingStudents.length);
+                    const pickedName = remainingStudents.splice(pickIndex,1)[0];
+                    nameDisplay.textContent = pickedName;
+                }, 500);
+            }
+        }
+
+        rollCallBtn.addEventListener('click', toggleRollCall);
+    </script>
+</body>
+</html>
